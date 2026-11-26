@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片转换SVG工具</title>
+<link rel="stylesheet" href="assets/style-a1b2c3.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>图片转换SVG工具</h1>
+    <p class="intro">在图片上手动取点，自动生成平滑曲线并导出可编辑 SVG。支持逐线或合并导出、坐标导入导出；生成的 SVG 不含取点标记，可直接在矢量软件中继续编辑。<br>与自动矢量化不同，轮廓取舍完全由你掌控：尤其适合背景复杂、对比弱的图片，以及连续色调、柔边、碎纹理、极细线，或毛发、草、织物等高频纹理——自动算法容易误判的区域，可按需取点、逐线保留。</p>
+    <div class="hint">
+      <strong>操作步骤</strong>
+      <ol>
+        <li>选择图片 → 选择线条颜色 → 在原图上依次点击取点；点击圆点可删除该点。</li>
+        <li>画多条线：点“新建一条线”，换色后继续取点。</li>
+        <li>取点技巧：直线段间距可稀疏，曲线段建议密集。</li>
+        <li>视图：滚动鼠标滚轮平移，Ctrl（Mac 为 ⌘）+ 滚轮缩放。</li>
+        <li>导出：每条线单独生成 SVG，或多线合并生成一个；坐标可导出、再导入复用。</li>
+        <li>也可先在原图上补画、修改后再载入本工具取点。</li>
+      </ol>
+      <p>粗细与线宽单位为原图像素；坐标采用笛卡尔系（原点：图片左下角，x 向右、y 向上）。</p>
+    </div>
+  </header>
+
+  <main style="display:none">
+    <div>
+      <section class="panel">
+        <h2 class="section-title">1. 画点连线</h2>
+        <div class="toolbar">
+          <label class="btn primary">选择图片<input type="file" id="fileInput" accept="image/*" hidden></label>
+          <span class="ctl"><label for="lineColor">线条颜色</label><input type="color" id="lineColor" value="#ff3b30" disabled></span>
+          <button id="newLineBtn" disabled>新建一条线</button>
+          <button id="undoBtn" disabled>撤销上一个点</button>
+          <button id="clearLineBtn" disabled>清空当前线</button>
+          <button id="clearAllBtn" disabled>清空全部</button>
+        </div>
+        <div class="toolbar sub">
+          <span class="ctl"><label for="pointSizeRange">点粗细</label><input type="range" id="pointSizeRange" min="2" max="60" value="12" disabled><span class="val" id="pointSizeVal">12 px</span></span>
+          <span class="ctl"><label for="lineWidthRange">线宽</label><input type="range" id="lineWidthRange" min="1" max="30" value="4" disabled><span class="val" id="lineWidthVal">4 px</span></span>
+          <span class="ctl"><label for="smoothRange">平滑度</label><input type="range" id="smoothRange" min="0" max="100" value="100" disabled><span class="val" id="smoothValue">100%</span></span>
+        </div>
+        <div class="toolbar sub">
+          <button id="zoomOutBtn" disabled>缩小 −</button>
+          <span class="ctl"><span id="zoomLabel">100%</span></span>
+          <button id="zoomInBtn" disabled>放大 ＋</button>
+          <button id="zoomFitBtn" disabled>适应窗口</button>
+          <button id="zoomNativeBtn" disabled>原始像素 1:1</button>
+        </div>
+
+        <div id="dropzone" class="dropzone">点击“选择图片”，或将图片文件拖放到这里</div>
+
+        <div id="viewport" class="viewport" hidden>
+          <div id="stage" class="stage">
+            <img id="image" alt="待标注图片">
+            <svg id="curveOverlay" class="curve-overlay"></svg>
+            <div id="markers" class="markers"></div>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">从坐标生成SVG <span class="badge" id="coordStatus"></span></h2>
+        <p class="hint" style="margin:0 0 10px">如果你想用其他专业软件画图，在这里导出坐标。<br>如果你已经有图的坐标，在下面导入数据即可生成SVG。</p>
+        <div class="toolbar">
+          <button id="exportCoordsBtn" disabled>导出当前坐标</button>
+          <button id="loadCoordsBtn" class="btn primary" disabled>按坐标绘制</button>
+          <button id="clearCoordsBtn" disabled>清空文本</button>
+        </div>
+        <div class="toolbar">
+          <span class="ctl"><label for="canvasW">画布宽</label><input type="number" id="canvasW" min="1" value="800" style="width:80px"></span>
+          <span class="ctl"><label for="canvasH">画布高</label><input type="number" id="canvasH" min="1" value="600" style="width:80px"></span>
+          <span class="badge">未载入图片时按此尺寸生成 SVG</span>
+        </div>
+        <textarea id="coordText" spellcheck="false" placeholder="每行一个点：x,y&#10;空行分隔多条线；或用 # 线名 作为标题行&#10;示例：&#10;# 线1&#10;10,20&#10;30,40&#10;&#10;# 线2&#10;50,60&#10;70,80"></textarea>
+        <p class="hint">坐标采用笛卡尔系（原点左下角，x 向右、y 向上）。“按坐标绘制”会用文本中的线条替换当前线条并直接生成 SVG。</p>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2 class="section-title">2. 生成SVG <span class="badge" id="currentHint">未选择</span></h2>
+      <div id="lineList"></div>
+
+      <div class="actions">
+        <button id="genBtn" class="btn ok" disabled>生成各线 SVG</button>
+        <button id="genOneBtn" disabled>生成单个合并 SVG</button>
+        <button id="copyBtn" disabled>复制全部 SVG</button>
+        <button id="downloadBtn" disabled>下载全部 SVG</button>
+        <button id="downloadOneBtn" disabled>下载合并 SVG</button>
+      </div>
+      <div class="svg-preview-box">
+        <span class="badge">SVG 渲染预览（每条线一个）</span>
+        <div id="svgRender"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="assets/app-a1b2c3.js"></script>
+</body>
+</html>
